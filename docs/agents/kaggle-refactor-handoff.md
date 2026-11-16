@@ -76,7 +76,7 @@ column names that commit instead of pretending each had its own.
 | T7 | next | Read-only cache support (gap 1) — argued as unnecessary under `HF_HUB_OFFLINE=1`, unproven on a live mount | — | — | not started |
 | T8 | 2026-11-16 | Licence pre-acceptance for ephemeral sessions (gap 2): `scripts/kaggle_preaccept_licenses.py` records the Max pack through `model_acceptance.accept()` bound to the live terms fingerprint, refuses to run without `OMNIVOICE_DATA_DIR`; explicit notebook cell runs it before uvicorn starts | `526e95fb2` | `scripts/kaggle_preaccept_licenses.py`, `tests/scripts/test_kaggle_preaccept_licenses.py`, notebook licence cell | code done, stdlib-level tests pass locally, **not exercised on Kaggle** |
 | T9 | 2026-11-16 | Bootstrap notebook: dataset discovery, Docker-equivalent install, cuDNN 8 side-load, uvicorn in server mode against the read-only cache, `/health` wait, `/models` pack check, Cloudflare quick tunnel, printed URL + key | `3e8327590` | `notebooks/VoiceStudio_Kaggle_2xT4.ipynb` | code done, **never run on Kaggle** |
-| T10 | next | HF token in the setup wizard | — | — | not started |
+| T10 | 2026-11-16 | HF token in the setup wizard: the shipped `HuggingFaceToken` panel mounts in step 2 (model packs) when a pending `/setup/status` model is a gated catalogue row, above the pack picker, no new strings | `517adf1d2` | `electron/src/renderer/src/components/setup-wizard.tsx`, `setup-wizard.test.tsx`, `docs/setup/huggingface-token.md` | code done, **Electron test not run locally** (no bun/node_modules) |
 | T11 | last | Multi-GPU placement (gap 5) | — | — | not started |
 | T12 | 2026-11-16 | Session shutdown control: notebook `session_control.py` sidecar (Bearer-gated route, tunnel pidfile → kernel SIGTERM/SIGKILL → `os._exit`), `shutdownRemoteSession` in Electron main + IPC + Settings button with confirm, 7 strings × 22 locales, notebook contract test | `e727d259f` | `notebooks/VoiceStudio_Kaggle_2xT4.ipynb`, `electron/src/main/remote-backend.ts`, `electron/src/renderer/src/features/settings/remote-backend-settings.tsx`, `tests/test_kaggle_session_control.py` | code done, **not run on Kaggle; Electron tests not run locally** (no bun/node_modules on the dev machine) |
 
@@ -129,17 +129,17 @@ uv run pytest tests/scripts/test_build_kaggle_dataset.py -q
 
 ## Where the agent stopped
 
-End of **T8 code**: the plan (`4bee87c7d`), the builder (`b57f61b09`), the
-notebook (`3e8327590`), the session-shutdown control (`e727d259f`: notebook
-sidecar route + Electron `shutdownRemote` IPC + Settings → Sharing button +
-locale strings + `tests/test_kaggle_session_control.py`) and the licence
-pre-acceptance (`526e95fb2`) are committed; the README was rebranded for the
-fork just before (`17efe667e`, see `git log`). A latent collection error in
-T6's test file was fixed on the way (`6044f642b`: `tests/scripts/__init__.py`
+End of **T10 code**: the plan (`4bee87c7d`), the builder (`b57f61b09`), the
+notebook (`3e8327590`), the session-shutdown control (`e727d259f`), the
+licence pre-acceptance (`526e95fb2`) and the wizard HF-token surface
+(`517adf1d2`) are committed; the README was rebranded for the fork just
+before (`17efe667e`, see `git log`), and a latent collection error in T6's
+test file was fixed on the way (`6044f642b`: `tests/scripts/__init__.py`
 shadowed `from scripts import …`). **Nothing has run on Kaggle**; the
-builder's tests still need the full uv env and the Electron-side T12 tests
-need bun (neither exists on this machine — the stdlib-level suites did pass).
-T7/T10/T11 are untouched.
+builder's tests still need the full uv env and the Electron-side T12/T10
+tests need bun (neither exists on this machine — the stdlib-level suites and
+esbuild syntax checks did pass). T7 waits on T9's evidence; only T11
+(multi-GPU) remains unstarted.
 
 ## Where the next agent starts
 
@@ -159,9 +159,11 @@ T7/T10/T11 are untouched.
    licence cell runs `scripts/kaggle_preaccept_licenses.py` through the real
    fingerprinted gate. Verify it live during T9: a fresh session must not ask
    again for NLLB-200 or the OmniVoice weights.
-4. **T10 — HF token in the wizard.** Mount `HuggingFaceToken` in step 1 of
-   `setup-wizard.tsx`; no new strings. Test: a gated repo shows the token field
-   before the download starts.
+4. ~~**T10 — HF token in the wizard.**~~ **Done** (`517adf1d2`): the panel
+   mounts in the model-packs step when a pending model is gated; the vitest
+   covers the gated, non-gated and nothing-pending cases but has not run
+   locally. During T9, confirm the panel appears with NLLB-200 pending and
+   that saving the token there feeds the download.
 5. **T11 — multi-GPU.** Placement across two devices: device list in
    `HostCaps`, `get_best_device()` returning an indexed device, per-device GPU
    pool and admission, engine pinning (TTS on 0, ASR/translation on 1). Must be
