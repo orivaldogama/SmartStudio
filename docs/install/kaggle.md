@@ -24,6 +24,7 @@ service — do not put a shared instance behind it.
 | Desktop app as the UI | Yes | **Settings → Sharing → Remote backend**: URL + API key |
 | Browser-only UI | Yes | The backend serves the SPA at `/` when `frontend/dist` is present |
 | Start the session from the app | **No** | Kaggle exposes no API for an interactive GPU session; a human clicks *Run* and the GPU is allocated then |
+| Stop the session from the app | **Yes** | **Settings → Sharing → Remote backend → Shut down session**: the notebook's control route stops the tunnel and ends the kernel, so Kaggle releases the GPU instead of idling until the timeout |
 | Keep voices and exports between sessions | **No** | `/kaggle/working` only survives with *Save Version* (20 GB cap) |
 | A stable URL | **No** | A quick tunnel gets a new hostname per session |
 | Both T4s used | **Not yet** | The OSS backend is single-device; see [Known gaps](#known-gaps-before-this-ships) |
@@ -146,6 +147,14 @@ way the Docker image does (`uv pip install --system` with
 waits for `/health`, checks the five repositories through `/models` and prints
 the tunnel URL with the API key.
 
+The start cell launches uvicorn through a small `session_control.py` sidecar it
+writes next to the log: the backend app plus one extra route,
+`POST /api/session-control/shutdown`, behind the same Bearer gate as every
+other remote request. Called from the desktop app (section 3), it stops the
+tunnel, ends the notebook kernel — which ends the Kaggle session and its GPU
+billing — and exits the server. `tests/test_kaggle_session_control.py` pins the
+contract; the Kaggle side of it has not been exercised live yet (gap 6).
+
 Environment for the server process:
 
 | Variable | Value | Why |
@@ -184,6 +193,10 @@ domain is the only stable option.
    `OMNIVOICE_API_KEY` value, **Test connection**, then **Save & reload**.
 4. If the tunnel dies, the app shows the remote-backend recovery screen; choose
    **Use local backend** until a new URL exists.
+5. When you are done, press **Shut down session** in the same panel (and confirm):
+   the control route ends the tunnel and the kernel, so the GPU quota stops at
+   once instead of running down the idle timeout. Starting again stays manual —
+   a human clicks *Run* — and the next session prints a new URL.
 
 The desktop app sends the key on every request, so the backend's `Host` check
 never applies to it. A **browser** does carry `Origin`, so browser-only use needs

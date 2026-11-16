@@ -7,6 +7,7 @@ const mock = vi.hoisted(() => ({
   testRemote: vi.fn(),
   useRemote: vi.fn(),
   useLocal: vi.fn(),
+  shutdownRemote: vi.fn(),
   reload: vi.fn(),
 }));
 
@@ -17,10 +18,24 @@ vi.mock('@/components/bridge', () => ({
       testRemote: mock.testRemote,
       useRemote: mock.useRemote,
       useLocal: mock.useLocal,
+      shutdownRemote: mock.shutdownRemote,
     },
   }),
 }));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+// The real dialog portals into the document and animates; the tests only need
+// the confirm click wired to onConfirm.
+vi.mock('@/features/clone/confirm-dialog', () => ({
+  ConfirmDialog: ({
+    open,
+    title,
+    onConfirm,
+  }: {
+    open: boolean;
+    title: string;
+    onConfirm: () => void | Promise<void>;
+  }) => (open ? <button onClick={() => void onConfirm()}>{title}</button> : null),
+}));
 
 import { RemoteBackendSettings } from './remote-backend-settings';
 
@@ -92,4 +107,52 @@ it('always leaves a saved remote connection with a local recovery action', async
   fireEvent.click(await screen.findByRole('button', { name: 'settings.remote_backend_use_local' }));
   await waitFor(() => expect(mock.useLocal).toHaveBeenCalledOnce());
   expect(mock.reload).toHaveBeenCalledOnce();
+});
+
+it('shuts the saved remote session down only after confirmation', async () => {
+  mock.shutdownRemote.mockResolvedValue({ ok: true, target: 'https://old-box:3900' });
+  renderSettings(true);
+
+  fireEvent.click(
+    await screen.findByRole('button', { name: 'settings.remote_backend_shutdown' }),
+  );
+  expect(mock.shutdownRemote).not.toHaveBeenCalled();
+  fireEvent.click(
+    await screen.findByRole('button', {
+      name: 'settings.remote_backend_shutdown_confirm_title',
+    }),
+  );
+  await waitFor(() => expect(mock.shutdownRemote).toHaveBeenCalledOnce());
+  expect(await screen.findByText('settings.remote_backend_shutdown_ok')).toBeInTheDocument();
+});
+
+it('reports a remote backend that does not serve the shutdown route', async () => {
+  mock.shutdownRemote.mockResolvedValue({
+    ok: false,
+    kind: 'unsupported',
+    status: 404,
+    target: 'https://old-box:3900',
+  });
+  renderSettings(true);
+
+  fireEvent.click(
+    await screen.findByRole('button', { name: 'settings.remote_backend_shutdown' }),
+  );
+  fireEvent.click(
+    await screen.findByRole('button', {
+      name: 'settings.remote_backend_shutdown_confirm_title',
+    }),
+  );
+  expect(
+    await screen.findByText('settings.remote_backend_shutdown_unsupported'),
+  ).toBeInTheDocument();
+});
+
+it('offers session shutdown only while a remote backend is saved', async () => {
+  renderSettings(false);
+
+  await screen.findByRole('button', { name: 'settings.remote_backend_test' });
+  expect(
+    screen.queryByRole('button', { name: 'settings.remote_backend_shutdown' }),
+  ).toBeNull();
 });

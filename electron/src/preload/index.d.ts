@@ -216,6 +216,25 @@ export type RemoteBackendProbe =
       target: string;
     };
 
+export type RemoteShutdownResult =
+  | { ok: true; target: string }
+  | {
+      ok: false;
+      kind:
+        | 'invalid'
+        | 'tls'
+        | 'network'
+        | 'timeout'
+        | 'http'
+        | 'wrong_port'
+        | 'auth'
+        | 'no_remote'
+        | 'no_session'
+        | 'unsupported';
+      status?: number;
+      target: string;
+    };
+
 export interface SaveAudioRequest {
   /** App-relative API path (`/api/audio/<id>.wav`) or an absolute backend URL.
    *  Main resolves app-relative paths against the live backend base. */
@@ -596,6 +615,7 @@ export interface VoiceStudioBridge {
     testRemote(input: { url: string; apiKey: string }): Promise<RemoteBackendProbe>;
     useRemote(input: { url: string; apiKey: string }): Promise<RemoteBackendProbe>;
     useLocal(): Promise<BackendConnection>;
+    shutdownRemote(): Promise<RemoteShutdownResult>;
     websocketUrl(path: '/ws/transcribe' | '/ws/events' | '/ws/tts'): Promise<string>;
   };
   capture: {

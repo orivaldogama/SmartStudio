@@ -231,6 +231,60 @@ export async function probeRemoteBackend(
   }
 }
 
+export type RemoteShutdownResult =
+  | { ok: true; target: string }
+  | {
+      ok: false;
+      kind: RemoteProbeKind | 'no_remote' | 'no_session' | 'unsupported';
+      status?: number;
+      target: string;
+    };
+
+/**
+ * Ask a remote session to end itself. Only the Kaggle bootstrap notebook
+ * serves `/api/session-control/shutdown` (it kills the tunnel, ends the
+ * notebook kernel and with it the GPU billing); any other remote backend
+ * answers 404, reported as `unsupported`. Authenticates with the same
+ * short-lived session token every proxied request uses — the master key
+ * never leaves main and is not needed here.
+ */
+export async function shutdownRemoteSession(
+  rawUrl: string,
+  session: RemoteSession | null,
+  { fetcher = fetch, now = Date.now, timeoutMs = 5000 }: ProbeOptions = {},
+): Promise<RemoteShutdownResult> {
+  let target: string;
+  try {
+    target = normalizeRemoteUrl(rawUrl);
+  } catch {
+    return { ok: false, kind: 'invalid', target: rawUrl.trim() };
+  }
+  if (!session || session.expiresAt <= now() / 1000)
+    return { ok: false, kind: 'no_session', target };
+  try {
+    const result = await fetchWithin(
+      fetcher,
+      `${target}/api/session-control/shutdown`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.token}`,
+          'Content-Type': 'application/json',
+        },
+      },
+      timeoutMs,
+      (response) => ({ status: response.status }),
+    );
+    if (result.status === 202) return { ok: true, target };
+    if (result.status === 404) return { ok: false, kind: 'unsupported', status: 404, target };
+    if (result.status === 401 || result.status === 403)
+      return { ok: false, kind: 'auth', status: result.status, target };
+    return { ok: false, kind: 'http', status: result.status, target };
+  } catch (error) {
+    return { ok: false, kind: transportKind(target, error), target };
+  }
+}
+
 export async function remoteWebSocketUrl(
   rawUrl: string,
   path: '/ws/transcribe' | '/ws/events' | '/ws/tts',

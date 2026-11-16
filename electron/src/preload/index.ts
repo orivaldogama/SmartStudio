@@ -143,6 +143,7 @@ const bridge: VoiceStudioBridge = {
     testRemote: (input) => ipcRenderer.invoke('backend:testRemote', input),
     useRemote: (input) => ipcRenderer.invoke('backend:useRemote', input),
     useLocal: () => ipcRenderer.invoke('backend:useLocal'),
+    shutdownRemote: () => ipcRenderer.invoke('backend:shutdownRemote'),
     websocketUrl: (path) => ipcRenderer.invoke('backend:websocketUrl', path),
   },
   maintenance: {

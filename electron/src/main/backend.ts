@@ -100,7 +100,9 @@ import {
   probeRemoteBackend,
   remoteWebSocketUrl,
   saveRemoteBackend,
+  shutdownRemoteSession,
   type RemoteSession,
+  type RemoteShutdownResult,
 } from './remote-backend';
 import { toolSearchDirs, toolSearchDirsAsync } from './tool-path';
 import { SetupProgressTracker, cleanProcessLine, downloadStallExceeded } from './setup-progress';
@@ -2110,6 +2112,16 @@ export class BackendSupervisor extends EventEmitter<{
     }
     await this.restart();
     return this.connection;
+  }
+
+  /**
+   * Ask the saved remote session to end itself (Kaggle notebook backends
+   * serve the route; anything else reports `unsupported`). Uses the active
+   * session token, so an expired session must re-run Test connection first.
+   */
+  async shutdownRemote(): Promise<RemoteShutdownResult> {
+    if (!this.remoteUrl) return { ok: false, kind: 'no_remote', target: '' };
+    return shutdownRemoteSession(this.remoteUrl, this.activeSession());
   }
 
   private runtimeStorage(): { runtimeStorage?: ScopedStorage } {

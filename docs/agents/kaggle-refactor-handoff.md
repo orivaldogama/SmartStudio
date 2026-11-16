@@ -57,6 +57,7 @@ Two follow-up answers given in the same session:
 | Hugging Face token in the setup wizard | **Yes** — mount the existing `HuggingFaceToken` component; small, reuses shipped strings |
 | Kaggle API key in the wizard | **No** — the app never talks to Kaggle; a full-scope account key in the product is the wrong boundary |
 | LLM "brain" (Llama) | Out of the Max pack; if wanted, a separate opt-in pack, 3B–8B Q4 on the second T4 |
+| Session lifecycle from the app (2026-11-16, owner) | **Shutdown only** — an authenticated notebook route (`POST /api/session-control/shutdown`) plus a Settings → Sharing → Remote backend button end the kernel and release the GPU; *starting* stays a human *Run* on Kaggle, so the app still never holds Kaggle API credentials |
 
 ## Timeline
 
@@ -77,6 +78,7 @@ column names that commit instead of pretending each had its own.
 | T9 | 2026-11-16 | Bootstrap notebook: dataset discovery, Docker-equivalent install, cuDNN 8 side-load, uvicorn in server mode against the read-only cache, `/health` wait, `/models` pack check, Cloudflare quick tunnel, printed URL + key | `3e8327590` | `notebooks/VoiceStudio_Kaggle_2xT4.ipynb` | code done, **never run on Kaggle** |
 | T10 | next | HF token in the setup wizard | — | — | not started |
 | T11 | last | Multi-GPU placement (gap 5) | — | — | not started |
+| T12 | 2026-11-16 | Session shutdown control: notebook `session_control.py` sidecar (Bearer-gated route, tunnel pidfile → kernel SIGTERM/SIGKILL → `os._exit`), `shutdownRemoteSession` in Electron main + IPC + Settings button with confirm, 7 strings × 22 locales, notebook contract test | — (uncommitted at write time; fill the SHA when committed) | `notebooks/VoiceStudio_Kaggle_2xT4.ipynb`, `electron/src/main/remote-backend.ts`, `electron/src/renderer/src/features/settings/remote-backend-settings.tsx`, `tests/test_kaggle_session_control.py` | code done, **not run on Kaggle; Electron tests not run locally** (no bun/node_modules on the dev machine) |
 
 ## Evidence map
 
@@ -123,9 +125,14 @@ uv run pytest tests/scripts/test_build_kaggle_dataset.py -q
 
 ## Where the agent stopped
 
-End of **T9 code**: the plan (`4bee87c7d`), the builder (`b57f61b09`) and the
-notebook (`3e8327590`) are committed and pushed. **Nothing has run on Kaggle**,
-the builder's tests have not run locally, and T7/T8/T10/T11 are untouched.
+End of **T12 code**: the plan (`4bee87c7d`), the builder (`b57f61b09`) and the
+notebook (`3e8327590`) are committed and pushed; the T12 session-shutdown
+control (notebook sidecar route + Electron `shutdownRemote` IPC + Settings →
+Sharing button + locale strings + `tests/test_kaggle_session_control.py`) sits
+in the working tree **uncommitted**. **Nothing has run on Kaggle**, the
+builder's tests have not run locally, the Electron-side T12 tests have not run
+locally (no bun/node_modules on this machine), and T7/T8/T10/T11 are
+untouched.
 
 ## Where the next agent starts
 
@@ -134,6 +141,9 @@ the builder's tests have not run locally, and T7/T8/T10/T11 are untouched.
    `/health` time, cold first-generate time, `nvidia-smi` memory per engine, and
    whether the read-only mount throws any write. That run is what converts T9
    from code to evidence, and it decides whether T7 is real work or a no-op.
+   In the same session, exercise T12 end to end: connect the desktop app,
+   press **Shut down session**, and verify the 202, the tunnel dying, the
+   kernel exiting, and Kaggle marking the session ended (quota stops).
 2. **T7 — read-only cache, if the session shows a write.** Teach the
    download/repair path to tolerate a cache it cannot write: no `refs/` write
    required, no lock file required, a clear error when a snapshot needs repair.

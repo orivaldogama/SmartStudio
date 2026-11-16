@@ -1,4 +1,4 @@
-import { KeyRoundIcon, ServerCogIcon } from 'lucide-react';
+import { KeyRoundIcon, PowerOffIcon, ServerCogIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -7,10 +7,15 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { getBridge } from '@/components/bridge';
+import { ConfirmDialog } from '@/features/clone/confirm-dialog';
 import { SettingsRow, SettingsSection } from './settings-layout';
 
 type Probe = Awaited<
   ReturnType<NonNullable<ReturnType<typeof getBridge>>['backend']['testRemote']>
+>;
+
+type Shutdown = Awaited<
+  ReturnType<NonNullable<ReturnType<typeof getBridge>>['backend']['shutdownRemote']>
 >;
 
 export function RemoteBackendSettings({
@@ -33,7 +38,9 @@ export function RemoteBackendSettings({
   const [url, setUrl] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [probe, setProbe] = useState<Probe | null>(null);
-  const [busy, setBusy] = useState<'test' | 'save' | 'local' | null>(null);
+  const [shutdown, setShutdown] = useState<Shutdown | null>(null);
+  const [confirmShutdown, setConfirmShutdown] = useState(false);
+  const [busy, setBusy] = useState<'test' | 'save' | 'local' | 'shutdown' | null>(null);
 
   useEffect(() => {
     if (!dirty.current && connection.data?.remote) setUrl(connection.data.url);
@@ -82,6 +89,22 @@ export function RemoteBackendSettings({
     }
   };
 
+  // Ends the remote session itself (Kaggle notebook backends serve the
+  // route); main uses the saved URL and the active session token, so no
+  // credential travels through the renderer.
+  const shutdownRemote = async () => {
+    if (!bridge || busy) return;
+    setBusy('shutdown');
+    setShutdown(null);
+    try {
+      setShutdown(await bridge.backend.shutdownRemote());
+    } catch {
+      setShutdown({ ok: false, kind: 'network', target: url.trim() });
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const probeText = probe?.ok
     ? t('settings.remote_backend_probe_ok', { detail: probe.detail })
     : probe?.kind === 'invalid'
@@ -91,6 +114,16 @@ export function RemoteBackendSettings({
         : probe
           ? t(`settings.remote_backend_error_${probe.kind}`, { status: probe.status })
           : '';
+
+  const shutdownText = !shutdown
+    ? ''
+    : shutdown.ok
+      ? t('settings.remote_backend_shutdown_ok')
+      : shutdown.kind === 'unsupported'
+        ? t('settings.remote_backend_shutdown_unsupported')
+        : shutdown.kind === 'no_session' || shutdown.kind === 'auth' || shutdown.kind === 'no_remote'
+          ? t('settings.remote_backend_shutdown_no_session')
+          : t('settings.remote_backend_shutdown_failed');
 
   return (
     <SettingsSection icon={ServerCogIcon} title={t('settings.remote_backend_title')}>
@@ -145,6 +178,20 @@ export function RemoteBackendSettings({
             {t('settings.remote_backend_use_local')}
           </Button>
         )}
+        {connection.data?.remote && (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={Boolean(busy)}
+            onClick={() => {
+              setShutdown(null);
+              setConfirmShutdown(true);
+            }}
+          >
+            <PowerOffIcon aria-hidden="true" className="size-4" />
+            {t('settings.remote_backend_shutdown')}
+          </Button>
+        )}
         {probe && (
           <Badge
             role={probe.ok ? 'status' : 'alert'}
@@ -154,7 +201,24 @@ export function RemoteBackendSettings({
             {probeText}
           </Badge>
         )}
+        {shutdown && (
+          <Badge
+            role={shutdown.ok ? 'status' : 'alert'}
+            variant={shutdown.ok ? 'outline' : 'destructive'}
+            className={shutdown.ok ? 'text-emerald-500' : undefined}
+          >
+            {shutdownText}
+          </Badge>
+        )}
       </div>
+      <ConfirmDialog
+        open={confirmShutdown}
+        onOpenChange={setConfirmShutdown}
+        title={t('settings.remote_backend_shutdown_confirm_title')}
+        description={t('settings.remote_backend_shutdown_confirm')}
+        confirmLabel={t('settings.remote_backend_shutdown')}
+        onConfirm={shutdownRemote}
+      />
     </SettingsSection>
   );
 }

@@ -113,6 +113,7 @@ export const CHANNELS = {
   backendTestRemote: 'backend:testRemote',
   backendUseRemote: 'backend:useRemote',
   backendUseLocal: 'backend:useLocal',
+  backendShutdownRemote: 'backend:shutdownRemote',
   backendWebsocketUrl: 'backend:websocketUrl',
   backendStatus: 'backend:status',
   maintenanceScanReset: 'maintenance:scanReset',
@@ -561,6 +562,10 @@ export function registerIpc(
     assertTrustedMainFrame(event, owner);
     const input = remoteInput(raw);
     return supervisor.useRemote(input.url, input.apiKey);
+  });
+  handle(CHANNELS.backendShutdownRemote, async (event) => {
+    assertTrustedMainFrame(event, getMainWindow());
+    return supervisor.shutdownRemote();
   });
   handle(CHANNELS.backendUseLocal, async (event) => {
     const owner = getMainWindow();

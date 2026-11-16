@@ -1,5 +1,10 @@
 import { expect, it, vi } from 'vitest';
-import { normalizeRemoteUrl, probeRemoteBackend, remoteWebSocketUrl } from './remote-backend';
+import {
+  normalizeRemoteUrl,
+  probeRemoteBackend,
+  remoteWebSocketUrl,
+  shutdownRemoteSession,
+} from './remote-backend';
 
 function json(body: unknown, init: ResponseInit = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -72,6 +77,41 @@ it('exchanges the master once and uses only the scoped session afterwards', asyn
     expiresAt: 3_601,
   });
   expect(JSON.stringify(result)).not.toContain('master-secret');
+});
+
+it('shuts a remote session down with the scoped session token only', async () => {
+  const session = { token: `ovs_admin_session_${'a'.repeat(43)}`, expiresAt: 3601 };
+  const fetcher = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+    expect(String(input)).toBe('https://gpu-box:3900/api/session-control/shutdown');
+    expect(init?.method).toBe('POST');
+    expect(new Headers(init?.headers).get('authorization')).toBe(`Bearer ${session.token}`);
+    return json({ status: 'shutting_down' }, { status: 202 });
+  });
+  expect(
+    await shutdownRemoteSession('https://gpu-box:3900', session, { fetcher, now: () => 1_000 }),
+  ).toEqual({ ok: true, target: 'https://gpu-box:3900' });
+  expect(fetcher).toHaveBeenCalledOnce();
+});
+
+it('classifies a plain remote as unsupported and an expired session as no_session', async () => {
+  const session = { token: `ovs_admin_session_${'a'.repeat(43)}`, expiresAt: 3601 };
+  const missingRoute = vi.fn(async () => json({ detail: 'Not Found' }, { status: 404 }));
+  expect(
+    await shutdownRemoteSession('https://gpu-box:3900', session, {
+      fetcher: missingRoute,
+      now: () => 1_000,
+    }),
+  ).toMatchObject({ ok: false, kind: 'unsupported', status: 404 });
+
+  // An expired (or absent) session never reaches the network: the user must
+  // re-run Test connection to mint a fresh token first.
+  const never = vi.fn();
+  for (const stale of [{ ...session, expiresAt: 0 }, null]) {
+    expect(
+      await shutdownRemoteSession('https://gpu-box:3900', stale, { fetcher: never, now: () => 1_000 }),
+    ).toMatchObject({ ok: false, kind: 'no_session' });
+  }
+  expect(never).not.toHaveBeenCalled();
 });
 
 it('distinguishes a missing key from an unrelated HTTP failure', async () => {
