@@ -17,6 +17,8 @@ describes the target behaviour; this one records the state of the work.
    [Evidence map](#evidence-map); re-check them before building on them.
 3. Append rows. Never rewrite a finished row to make the story cleaner.
 4. Every new step ends in a commit. No commit, no completion.
+5. Commits that only update this page are bookkeeping, not steps:
+   `git log -- docs/agents/kaggle-refactor-handoff.md` lists them.
 
 ## Current status
 
@@ -67,7 +69,7 @@ column names that commit instead of pretending each had its own.
 | T2 | 2026-11-16 | Corrected the `AGENTS.md` row for `frontend/`. The rest of that file was already restructured in the working copy before this session; the commit carries both and its message says so | `4bee87c7d` | `git show 4bee87c7d -- AGENTS.md` | done |
 | T3 | 2026-11-16 | Owner decisions recorded (six questions, three follow-ups) | `4bee87c7d` | decision log above | done |
 | T4 | 2026-11-16 | Wrote the feature guide and this handoff page | `4bee87c7d` | `git show --stat 4bee87c7d` | done |
-| T5 | 2026-11-16 | Established the repository on the fork's `main` and committed the plan | `4bee87c7d` | `git show --stat 4bee87c7d` | done |
+| T5 | 2026-11-16 | Established the repository on the fork's `main` and committed the plan and this page | `4bee87c7d`, `d59d74f9d` | `git show --stat 4bee87c7d` | done |
 | T6 | next | Dataset builder + manifest + test | — | — | not started |
 | T7 | next | Read-only cache support (gap 1) | — | — | not started |
 | T8 | next | Licence pre-acceptance for ephemeral sessions (gap 2) | — | — | not started |
