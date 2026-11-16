@@ -1,8 +1,9 @@
 # VoiceStudio on Kaggle (2 × T4)
 
-> **Status: plan, not shipped.** Nothing on this page works out of the box today.
-> The dataset builder, the bootstrap notebook, read-only HF-cache support and
-> licence pre-acceptance still have to land; see
+> **Status: built, not yet run on Kaggle.** The dataset builder
+> (`scripts/build_kaggle_dataset.py`) and the bootstrap notebook
+> (`notebooks/VoiceStudio_Kaggle_2xT4.ipynb`) exist; neither has been exercised
+> on a live 2 × T4 session. The gaps that remain are listed in
 > [Known gaps](#known-gaps-before-this-ships). The current position and the
 > resume point for this work live in
 > [the refactor timeline](../agents/kaggle-refactor-handoff.md).
@@ -48,14 +49,23 @@ attention, CUDA Graphs skipped below sm_80, ~2.5 GB peak) is measured in
 
 ```
 [private Kaggle dataset]   pre-populated Hugging Face cache (Max pack)
-          | mounted read-only
+          | mounted read-only at /kaggle/input
           v
 [Kaggle notebook session]  deps -> HF_HUB_CACHE -> OMNIVOICE_DATA_DIR=/kaggle/working
-                           uvicorn 0.0.0.0:3900 + OMNIVOICE_API_KEY + tunnel
+                           uvicorn 127.0.0.1:3900 + OMNIVOICE_API_KEY
+                           cloudflared quick tunnel (dials out)
           | HTTPS
           v
 [desktop VoiceStudio]      Settings -> Sharing -> Remote backend
 ```
+
+## Runbook
+
+1. Build the dataset on a machine that already has the Max pack installed
+   (section 1), and upload it privately.
+2. Attach it to a Kaggle notebook with **GPU T4 ×2** and run
+   `notebooks/VoiceStudio_Kaggle_2xT4.ipynb` (section 2).
+3. Paste the URL and API key it prints into the desktop app (section 3).
 
 ## 1. Build the model dataset
 
@@ -72,12 +82,16 @@ The Max pack is five repositories, about 8.5 GB:
 Upload it as the **Hugging Face cache layout**, not as loose files:
 
 ```
-/kaggle/input/voicestudio-models/hub/
-  models--k2-fsa--OmniVoice/
-    refs/main                          # file containing the snapshot commit
-    snapshots/<commit>/...             # the files, unchanged
-  models--Systran--faster-whisper-large-v3/
-    ...
+/kaggle/input/voicestudio-model-pack-max/
+  hub/
+    models--k2-fsa--OmniVoice/
+      refs/main                        # file containing the snapshot commit
+      voicestudio-revision             # the same commit, VoiceStudio's marker
+      snapshots/<commit>/...           # the files, unchanged
+    models--Systran--faster-whisper-large-v3/
+      ...
+  manifest.json                        # repo ids, SHAs, sizes, file hashes
+  dataset-metadata.json                # the file `kaggle datasets create -p` reads
 ```
 
 Two pieces of the backend depend on that shape:
@@ -87,25 +101,59 @@ Two pieces of the backend depend on that shape:
   for `models--<org>--<name>/snapshots/<revision>` with weights above a size
   floor. Loose files would be re-downloaded.
 - `backend/services/hf_revisions.py` pins every curated repository to a reviewed
-  commit SHA from `backend/config/model_licenses.json`. Build the dataset from
-  `revision_for(repo_id)` so the snapshot directory the app looks for exists.
+  commit SHA from `backend/config/model_licenses.json`. The snapshot directory
+  the app looks for is `revision_for(repo_id)`'s, so build from that.
 
-Ship a `manifest.json` next to the cache (`repo_id`, `revision`, `size_bytes`,
-file count) so a mismatch is diagnosable instead of a silent re-download.
+`scripts/build_kaggle_dataset.py` does all of it:
 
-The builder script, the `scripts/` entry point and its test are part of the
-[known gaps](#known-gaps-before-this-ships); they do not exist yet.
+```sh
+# On a machine whose VoiceStudio already has the Max pack installed:
+uv run python scripts/build_kaggle_dataset.py --out build/kaggle-max --owner <your-kaggle-username>
+
+# Or let it fetch the five repositories itself (network, several GB):
+uv run python scripts/build_kaggle_dataset.py --out build/kaggle-max --download --owner <name>
+
+# Re-check an output against its manifest (sizes always, sha256 by default):
+uv run python scripts/build_kaggle_dataset.py --out build/kaggle-max --verify
+
+kaggle datasets create -p build/kaggle-max
+# Rebuilding: bump nothing, re-run the builder, then
+# kaggle datasets version -p build/kaggle-max -m "rebuild at the same pins"
+```
+
+What lands in `--out`:
+
+| Path | Contents |
+| --- | --- |
+| `hub/` | The cache layout above, as **real files** — no `blobs/`, no symlinks, so a zip round-trip and a read-only mount both work |
+| `manifest.json` | `repo_id`, pinned `revision`, `size_bytes`, `file_count`, per-file `sha256`, and one `digest` per repository |
+| `dataset-metadata.json` | Title, id and licence, ready for `kaggle datasets create -p` |
+| `README.md` | What the dataset is and its non-commercial terms |
+
+The builder never touches the network unless `--download` is passed, and it
+refuses a non-empty `--out` without `--force`. `tests/scripts/test_build_kaggle_dataset.py`
+checks the result through the backend's own readers (`model_catalogue`,
+`hf_revisions`), not a re-implementation of the layout rule.
 
 ## 2. Bootstrap the backend in the session
+
+`notebooks/VoiceStudio_Kaggle_2xT4.ipynb` is the runnable form of this section.
+Attach the dataset, pick **Settings → Accelerator → GPU T4 ×2**, keep internet
+on, and run the cells: it locates the mounted `hub/`, installs the backend the
+way the Docker image does (`uv pip install --system` with
+`deploy/torch-constraints.txt`, `deploy/security-constraints.txt` and
+`deploy/uv-overrides.txt`), side-loads cuDNN 8 for CTranslate2, starts uvicorn,
+waits for `/health`, checks the five repositories through `/models` and prints
+the tunnel URL with the API key.
 
 Environment for the server process:
 
 | Variable | Value | Why |
 | --- | --- | --- |
 | `OMNIVOICE_SERVER_MODE` | `1` | Server mode: the admin surface accepts the API key (Docker sets this too) |
-| `OMNIVOICE_BIND_HOST` | `0.0.0.0` | Listen beyond loopback |
 | `OMNIVOICE_API_KEY` | long random string | Bearer key for every non-loopback HTTP and WebSocket request |
-| `HF_HUB_CACHE` | `/kaggle/input/voicestudio-models/hub` | Use the dataset instead of downloading |
+| `OMNIVOICE_BIND_HOST` | unset (loopback) | The tunnel runs on the same host; set `0.0.0.0` only when the proxy is elsewhere |
+| `HF_HUB_CACHE` | `/kaggle/input/<dataset-slug>/hub` | Use the dataset instead of downloading |
 | `HF_HUB_OFFLINE` | `1` | Fail fast instead of reaching the network |
 | `OMNIVOICE_DATA_DIR` | `/kaggle/working/omnivoice` | Writable state (DB, voices, outputs) |
 | `OMNIVOICE_FRONTEND_DIST` | path of the built SPA | Only needed for browser-only use |
@@ -115,10 +163,12 @@ Environment for the server process:
 
 See [performance](../performance.md) for the full list and defaults.
 
-The cache is mounted read-only, and the Hugging Face Hub writes into it
-(`refs/`, lock files, `.incomplete`). Until read-only support lands, expect the
-bootstrap to fail on a write; the workaround is a symlink overlay into
-`/kaggle/working` and pointing `HF_HUB_CACHE` there.
+The cache is mounted read-only and the load path does not write to it: under
+`HF_HUB_OFFLINE=1` the repair pass in `services/hf_cache_repair.py` skips
+entirely, `snapshot_download(…, local_files_only=True)` only reads, and the
+`voicestudio-revision` marker the backend writes after a real download is
+already in the dataset. That argument has not yet been proven against a live
+mount — see gap 1.
 
 Expose the port through a tunnel that dials out (Cloudflare Tunnel, ngrok). The
 free quick tunnel changes hostname every session; a named tunnel on your own
@@ -126,12 +176,19 @@ domain is the only stable option.
 
 ## 3. Connect the desktop app
 
-1. Start the backend and the tunnel, then open the tunnel URL's `/health` and
-   confirm it answers 200.
-2. **Settings → Sharing → Remote backend**: paste the `https://…` URL and the
+1. The tunnel cell prints the URL and the API key; it also writes them to
+   `/kaggle/working/remote-backend.txt`, which does not survive the session.
+2. Open the tunnel URL's `/health` and confirm it answers. Any HTTP status means
+   the tunnel reaches the backend.
+3. **Settings → Sharing → Remote backend**: paste the `https://…` URL and the
    `OMNIVOICE_API_KEY` value, **Test connection**, then **Save & reload**.
-3. If the tunnel dies, the app shows the remote-backend recovery screen; choose
+4. If the tunnel dies, the app shows the remote-backend recovery screen; choose
    **Use local backend** until a new URL exists.
+
+The desktop app sends the key on every request, so the backend's `Host` check
+never applies to it. A **browser** does carry `Origin`, so browser-only use needs
+that hostname in `OMNIVOICE_ALLOWED_ORIGINS` and `OMNIVOICE_ALLOWED_HOSTS`, plus
+`frontend/dist` present.
 
 Plain `http://` on a tunnel sends the bearer key in clear text — use HTTPS. The
 same key rules as any remote host apply; see [API authentication](../api-auth.md)
@@ -144,20 +201,21 @@ and OmniVoice's weights are non-commercial. Keep the dataset **private** and use
 it yourself. See the [model licence inventory](../licensing/model-inventory.md).
 
 Pre-installing the weights does not accept their terms: `services/model_acceptance.py`
-still gates every model whose licence category is not `commercial`, so a fresh
-session asks again. That gate is why licence pre-acceptance is in the gap list.
+still gates every model whose licence category is not `commercial`. Acceptance is
+recorded in `OMNIVOICE_DATA_DIR`, which is ephemeral, so an unmodified session
+asks again on the first use of each model. Accept it once per session in the
+UI; pre-acceptance (gap 2) would remove that step.
 
 ## Known gaps before this ships
 
 | # | Gap | Where |
 | --- | --- | --- |
-| 1 | Read-only model cache (Hub wants `refs/`, locks, `.incomplete`) | `backend/services/model_catalogue.py`, Hub writes |
-| 2 | Licence pre-acceptance for an ephemeral session | `backend/services/model_acceptance.py` |
-| 3 | `frontend/dist` has to be published (built SPA, not in the dataset today) | `electron/vite.web.config.ts` |
-| 4 | Dataset builder + manifest + test | `scripts/` (new) |
-| 5 | Bootstrap notebook and this page's runbook | `notebooks/` (new) |
-| 6 | Remote-backend URL changes per session | `electron/src/renderer/src/features/settings` (deep link/env) |
-| 7 | Second T4 sits idle (single device per process) | `backend/services/model_manager.py`, `backend/core/device_caps.py` |
+| 1 | Read-only cache is argued, not proven: a live mount has not been exercised, and any path that still writes would fail there | `backend/services/model_catalogue.py`, Hub writes |
+| 2 | Licence pre-acceptance for an ephemeral session (today: accept once per session) | `backend/services/model_acceptance.py` |
+| 3 | `frontend/dist` has to be published for browser-only use (optional: the desktop app needs nothing) | `electron/vite.web.config.ts` |
+| 4 | Remote-backend URL changes per session | `electron/src/renderer/src/features/settings` (deep link/env) |
+| 5 | Second T4 sits idle (single device per process) | `backend/services/model_manager.py`, `backend/core/device_caps.py` |
+| 6 | No live-session run: install timings, first-load time and the T4 wheel behaviour are unmeasured | `notebooks/VoiceStudio_Kaggle_2xT4.ipynb` |
 
 ## Practical advice
 

@@ -22,9 +22,10 @@ describes the target behaviour; this one records the state of the work.
 
 ## Current status
 
-Planning is complete, the owner has fixed the scope, and the plan is committed at
-`4bee87c7d`, the baseline commit of this branch. **No product code has been
-written for this refactor.**
+The plan is committed at `4bee87c7d`, the builder at `b57f61b09` and the
+bootstrap notebook at `3e8327590`. Nothing has been executed on Kaggle yet, and
+the builder's test suite has not been executed at all — see
+[Local verification](#local-verification) before trusting either.
 
 ## Remaining setup
 
@@ -70,12 +71,12 @@ column names that commit instead of pretending each had its own.
 | T3 | 2026-11-16 | Owner decisions recorded (six questions, three follow-ups) | `4bee87c7d` | decision log above | done |
 | T4 | 2026-11-16 | Wrote the feature guide and this handoff page | `4bee87c7d` | `git show --stat 4bee87c7d` | done |
 | T5 | 2026-11-16 | Established the repository on the fork's `main` and committed the plan and this page | `4bee87c7d`, `d59d74f9d` | `git show --stat 4bee87c7d` | done |
-| T6 | next | Dataset builder + manifest + test | — | — | not started |
-| T7 | next | Read-only cache support (gap 1) | — | — | not started |
+| T6 | 2026-11-16 | Dataset builder: hub-cache layout from `revision_for`, `manifest.json` (SHAs, sizes, per-file sha256), `--verify`, `--zip`, `dataset-metadata.json`; test reads the result back through `model_catalogue` and `hf_revisions` | `b57f61b09` | `scripts/build_kaggle_dataset.py`, `tests/scripts/test_build_kaggle_dataset.py` | done, **pytest not run** (see [Local verification](#local-verification)) |
+| T7 | next | Read-only cache support (gap 1) — argued as unnecessary under `HF_HUB_OFFLINE=1`, unproven on a live mount | — | — | not started |
 | T8 | next | Licence pre-acceptance for ephemeral sessions (gap 2) | — | — | not started |
-| T9 | next | Bootstrap notebook + runbook verification on a real session (gap 5) | — | — | not started |
+| T9 | 2026-11-16 | Bootstrap notebook: dataset discovery, Docker-equivalent install, cuDNN 8 side-load, uvicorn in server mode against the read-only cache, `/health` wait, `/models` pack check, Cloudflare quick tunnel, printed URL + key | `3e8327590` | `notebooks/VoiceStudio_Kaggle_2xT4.ipynb` | code done, **never run on Kaggle** |
 | T10 | next | HF token in the setup wizard | — | — | not started |
-| T11 | last | Multi-GPU placement (gap 7) | — | — | not started |
+| T11 | last | Multi-GPU placement (gap 5) | — | — | not started |
 
 ## Evidence map
 
@@ -98,37 +99,52 @@ the symbol, not a line number, because lines rot.
 | WhisperX alignment defaults to CPU | `backend/services/asr_backend.py` → `forced_align` (`OMNIVOICE_ALIGN_DEVICE`) | read the function |
 | HF token UI already exists | `electron/src/renderer/src/features/settings/credential-settings.tsx` → `HuggingFaceToken` | read the component |
 | Wizard layout (4 steps, model packs at step 1) | `electron/src/renderer/src/components/setup-wizard.tsx` → `steps` | read the constant |
+| A keyed request is never `Host`-checked | `backend/core/browser_guard.py` → `_network_authorized_only`, `is_cross_site` | read both |
+| The notebook installs like Docker, not like a venv | `notebooks/VoiceStudio_Kaggle_2xT4.ipynb` (install cell); `deploy/torch-constraints.txt` header; `notebooks/OmniVoice_Studio_Colab.ipynb` cell 2e | read the three |
+| cuDNN 8 side-load is found beside `<repo>/.venv` | `backend/core/cudnn8.py` → `compat_dirs`; `scripts/setup.py` → `_find_compat_dir` | read both |
+
+## Local verification
+
+T6's tests were written but **never executed**: this machine has no `.venv`, no
+`uv` and no `pytest`, and its system Python 3.15 has no `huggingface_hub` or
+`PyYAML`, so `model_catalogue.catalogue_entry()` degrades to an empty catalogue.
+The builder itself was exercised by a throwaway script against a synthetic
+snapshot (layout, `refs/main`, marker, hash + digest, tamper detection, zip
+paths, overwrite refusal, and `_snapshot_dirs` / `installed_revision` agreeing),
+which caught two real defects that are fixed in `b57f61b09`: a `Path`-vs-`ZipFile`
+mistake in a test, and a tamper case whose replacement byte-length also tripped
+the size check.
+
+Before trusting T6, run:
+
+```sh
+uv run pytest tests/scripts/test_build_kaggle_dataset.py -q
+```
 
 ## Where the agent stopped
 
-End of **T5**: the plan is committed at `4bee87c7d`, nothing is pushed, and no
-refactor code has started. The next step is T6.
+End of **T9 code**: the plan (`4bee87c7d`), the builder (`b57f61b09`) and the
+notebook (`3e8327590`) are committed and pushed. **Nothing has run on Kaggle**,
+the builder's tests have not run locally, and T7/T8/T10/T11 are untouched.
 
 ## Where the next agent starts
 
-Each step is its own commit; do them in this order.
-
-1. **T6 — dataset builder.** A script under `scripts/` that materialises the HF
-   cache layout from `revision_for(repo_id)`, writes `manifest.json`
-   (`repo_id`, `revision`, `size_bytes`, file count) and prints the eight sizes
-   against the 200 GB cap. Test: a fixture cache tree is recognised as installed
-   by `model_catalogue` without touching the network (`HF_HUB_OFFLINE=1`).
-   *Done when* the test fails before the change and passes after.
-2. **T7 — read-only cache.** Teach the download/repair path to tolerate a cache
-   it cannot write: no `refs/` write required, no lock file required, a clear
-   error when a snapshot needs repair. Test: a chmod-0555 cache root serves a
-   model without a write attempt.
+1. **T9 verification — the first real GPU session.** Attach the built dataset,
+   run the notebook on 2 × T4, and record in this page: install wall time,
+   `/health` time, cold first-generate time, `nvidia-smi` memory per engine, and
+   whether the read-only mount throws any write. That run is what converts T9
+   from code to evidence, and it decides whether T7 is real work or a no-op.
+2. **T7 — read-only cache, if the session shows a write.** Teach the
+   download/repair path to tolerate a cache it cannot write: no `refs/` write
+   required, no lock file required, a clear error when a snapshot needs repair.
+   Test: a chmod-0555 cache root serves a model without a write attempt.
 3. **T8 — licence pre-acceptance.** A documented, explicit bootstrap input that
    records acceptance for the named models in the ephemeral data root. Not a
    bypass of `model_acceptance`; the same fingerprint check must still apply.
-4. **T9 — notebook + runbook.** `notebooks/` bootstrap that installs deps, sets
-   the environment from [docs/install/kaggle.md](../install/kaggle.md), starts
-   the tunnel and prints the URL. Verify end to end in a real 2 × T4 session and
-   record the measured timings in this page.
-5. **T10 — HF token in the wizard.** Mount `HuggingFaceToken` in step 1 of
+4. **T10 — HF token in the wizard.** Mount `HuggingFaceToken` in step 1 of
    `setup-wizard.tsx`; no new strings. Test: a gated repo shows the token field
    before the download starts.
-6. **T11 — multi-GPU.** Placement across two devices: device list in
+5. **T11 — multi-GPU.** Placement across two devices: device list in
    `HostCaps`, `get_best_device()` returning an indexed device, per-device GPU
    pool and admission, engine pinning (TTS on 0, ASR/translation on 1). Must be
    opt-in and fall back to today's single-device behaviour, so macOS and

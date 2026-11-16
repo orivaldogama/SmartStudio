@@ -124,7 +124,7 @@ VoiceStudio/
 │   └── languages.md training.md data_preparation.md evaluation.md voice-design.md
 │
 ├── examples/                    ⟵ executable samples and inputs, including agentic/ and config/
-├── notebooks/                   ⟵ contains OmniVoice_Studio_Colab.ipynb
+├── notebooks/                   ⟵ runnable GPU hosts: OmniVoice_Studio_Colab.ipynb, VoiceStudio_Kaggle_2xT4.ipynb
 ├── omnivoice-gallery/           ⟵ submodule that publishes the voice gallery
 │
 ├── omnivoice_data/              ⟵ Docker bind-mount target (gitignored)
