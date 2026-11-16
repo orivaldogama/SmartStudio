@@ -7,6 +7,7 @@ than re-implementing the layout check here.
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -22,8 +23,16 @@ for entry in (str(ROOT), str(BACKEND)):
     if entry not in sys.path:
         sys.path.insert(0, entry)
 
-from scripts import build_kaggle_dataset as builder  # noqa: E402
 from services import hf_revisions, model_catalogue  # noqa: E402
+
+# Loaded by path, not as `scripts.build_kaggle_dataset`: pytest imports this
+# file as scripts.test_* (tests/scripts/ has an __init__.py), so the `scripts`
+# name is already bound to the test package and the plain import fails.
+_spec = importlib.util.spec_from_file_location(
+    "build_kaggle_dataset", ROOT / "scripts" / "build_kaggle_dataset.py"
+)
+builder = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(builder)
 
 REPO = "k2-fsa/OmniVoice"
 WEIGHT = b"\0" * (5 * 1024 * 1024 + 1024)  # above snapshot_has_weights' floor
