@@ -12,29 +12,29 @@ describes the target behaviour; this one records the state of the work.
 
 1. **The commit ledger is the only proof of progress.** A step is done when its
    row carries a SHA that `git show <sha> --stat` confirms.
-2. A row with `—` means the step happened while the workspace had **no git
-   repository**. Those rows are claims backed by the files named in
-   [Evidence map](#evidence-map), not committed truth. Re-check them before
-   building on them.
+2. A row whose commit column is `—` was recorded before the repository existed.
+   Those rows are claims backed by the files named in
+   [Evidence map](#evidence-map); re-check them before building on them.
 3. Append rows. Never rewrite a finished row to make the story cleaner.
 4. Every new step ends in a commit. No commit, no completion.
 
 ## Current status
 
-Planning is complete and the owner has fixed the scope. **No product code has
-been written for this refactor.** Two documents and one line of `AGENTS.md`
-exist; nothing is committed, because this working copy has no `.git`.
+Planning is complete, the owner has fixed the scope, and the plan is committed at
+`4bee87c7d`, the baseline commit of this branch. **No product code has been
+written for this refactor.**
 
-## Blockers (resolve before the first refactor commit)
+## Remaining setup
 
-| Blocker | Effect | Fix |
+| Item | State | Action |
 | --- | --- | --- |
-| No repository | No commits, no SHAs, no `git log` to hand off | `git init` here, or clone the upstream repository and copy this working tree over it |
-| No git identity | `git commit` fails outright | `git config user.name` / `user.email`; use the submitter's own identity only (`commit-identity` CI rule) |
-| No PR number | `changelog.d/<PR#>.<type>.md` cannot be named | Open the PR first, then add the fragment |
+| Repository | `main` tracks `origin` (`orivaldogama/SmartStudio`); `4bee87c7d` is the baseline | — |
+| Identity | `ORIVALDO DE HOLANDA GAMA <53544978+orivaldogama@users.noreply.github.com>`, set with `git config --local` | — |
+| Push | One command, never a rewrite | `git push origin main` after each commit — a fast-forward while the fork's `main` has no newer commits |
+| Changelog fragment | Missing | Needs the PR number: `changelog.d/<PR#>.<type>.md` |
 
-The first commit should capture **all** of the Max-pack plan: the two new docs,
-the `AGENTS.md` correction and the changelog fragment.
+The history starts at the fork's own `main`, not at an empty root, so pushes stay
+fast-forwards and merging upstream keeps working. Do not run `git init` again.
 
 ## Decision log — 2026-11-16 (owner)
 
@@ -57,18 +57,21 @@ Two follow-up answers given in the same session:
 
 ## Timeline
 
+T0–T4 predate the repository and were committed together at T5; their commit
+column names that commit instead of pretending each had its own.
+
 | # | Date | Step | Commit | Evidence | State |
 | --- | --- | --- | --- | --- | --- |
-| T0 | 2026-11-16 | Surveyed the Max pack, HF cache detection, headless/server mode, remote-backend path, GPU dispatch | — | see [Evidence map](#evidence-map) | done (uncommitted) |
-| T1 | 2026-11-16 | Verified Kaggle limits and Terms from upstream sources (T4 ×2, 12 h, 30 h/week, 20 GB, no inbound ports) | — | [docs/install/kaggle.md](../install/kaggle.md) | done (uncommitted) |
-| T2 | 2026-11-16 | Corrected the `AGENTS.md` row for `frontend/` (it is `build:web` output, not a stub) | — | `AGENTS.md` working tree | done (uncommitted) |
-| T3 | 2026-11-16 | Owner decisions recorded (six questions, three follow-ups) | — | section above | done (uncommitted) |
-| T4 | 2026-11-16 | Wrote the feature guide and this handoff page | — | `docs/install/kaggle.md`, this file | done (uncommitted) |
-| T5 | next | **Establish the repository and commit the plan** | *(expected)* | — | not started |
+| T0 | 2026-11-16 | Surveyed the Max pack, HF cache detection, headless/server mode, remote-backend path, GPU dispatch | `4bee87c7d` | see [Evidence map](#evidence-map) | done |
+| T1 | 2026-11-16 | Verified Kaggle limits and Terms from upstream sources (T4 ×2, 12 h, 30 h/week, 20 GB, no inbound ports) | `4bee87c7d` | [docs/install/kaggle.md](../install/kaggle.md) | done |
+| T2 | 2026-11-16 | Corrected the `AGENTS.md` row for `frontend/`. The rest of that file was already restructured in the working copy before this session; the commit carries both and its message says so | `4bee87c7d` | `git show 4bee87c7d -- AGENTS.md` | done |
+| T3 | 2026-11-16 | Owner decisions recorded (six questions, three follow-ups) | `4bee87c7d` | decision log above | done |
+| T4 | 2026-11-16 | Wrote the feature guide and this handoff page | `4bee87c7d` | `git show --stat 4bee87c7d` | done |
+| T5 | 2026-11-16 | Established the repository on the fork's `main` and committed the plan | `4bee87c7d` | `git show --stat 4bee87c7d` | done |
 | T6 | next | Dataset builder + manifest + test | — | — | not started |
-| T7 | next | Read-only cache support (gaps 1) | — | — | not started |
+| T7 | next | Read-only cache support (gap 1) | — | — | not started |
 | T8 | next | Licence pre-acceptance for ephemeral sessions (gap 2) | — | — | not started |
-| T9 | next | Bootstrap notebook + runbook verification on a real session (gaps 4, 5) | — | — | not started |
+| T9 | next | Bootstrap notebook + runbook verification on a real session (gap 5) | — | — | not started |
 | T10 | next | HF token in the setup wizard | — | — | not started |
 | T11 | last | Multi-GPU placement (gap 7) | — | — | not started |
 
@@ -96,43 +99,51 @@ the symbol, not a line number, because lines rot.
 
 ## Where the agent stopped
 
-End of **T4**: the plan and the handoff page exist, nothing is committed, and no
-refactor code has started. The repository question from the blockers table is
-open.
+End of **T5**: the plan is committed at `4bee87c7d`, nothing is pushed, and no
+refactor code has started. The next step is T6.
 
 ## Where the next agent starts
 
-Do them in this order; each is a separate commit.
+Each step is its own commit; do them in this order.
 
-1. **T5 — repository baseline.** Settle the `.git` question, configure the
-   submitter identity, commit the plan (docs + `AGENTS.md` row + changelog
-   fragment once the PR number exists). *Done when* `git log` shows the commit
-   and this page's T5 row carries its SHA.
-2. **T6 — dataset builder.** A script under `scripts/` that materialises the HF
+1. **T6 — dataset builder.** A script under `scripts/` that materialises the HF
    cache layout from `revision_for(repo_id)`, writes `manifest.json`
    (`repo_id`, `revision`, `size_bytes`, file count) and prints the eight sizes
    against the 200 GB cap. Test: a fixture cache tree is recognised as installed
    by `model_catalogue` without touching the network (`HF_HUB_OFFLINE=1`).
    *Done when* the test fails before the change and passes after.
-3. **T7 — read-only cache.** Teach the download/repair path to tolerate a cache
+2. **T7 — read-only cache.** Teach the download/repair path to tolerate a cache
    it cannot write: no `refs/` write required, no lock file required, a clear
    error when a snapshot needs repair. Test: a chmod-0555 cache root serves a
    model without a write attempt.
-4. **T8 — licence pre-acceptance.** A documented, explicit bootstrap input that
+3. **T8 — licence pre-acceptance.** A documented, explicit bootstrap input that
    records acceptance for the named models in the ephemeral data root. Not a
    bypass of `model_acceptance`; the same fingerprint check must still apply.
-5. **T9 — notebook + runbook.** `notebooks/` bootstrap that installs deps, sets
+4. **T9 — notebook + runbook.** `notebooks/` bootstrap that installs deps, sets
    the environment from [docs/install/kaggle.md](../install/kaggle.md), starts
    the tunnel and prints the URL. Verify end to end in a real 2 × T4 session and
    record the measured timings in this page.
-6. **T10 — HF token in the wizard.** Mount `HuggingFaceToken` in step 1 of
+5. **T10 — HF token in the wizard.** Mount `HuggingFaceToken` in step 1 of
    `setup-wizard.tsx`; no new strings. Test: a gated repo shows the token field
    before the download starts.
-7. **T11 — multi-GPU.** Placement across two devices: device list in
+6. **T11 — multi-GPU.** Placement across two devices: device list in
    `HostCaps`, `get_best_device()` returning an indexed device, per-device GPU
    pool and admission, engine pinning (TTS on 0, ASR/translation on 1). Must be
    opt-in and fall back to today's single-device behaviour, so macOS and
    single-GPU hosts keep identical defaults.
+
+## Picking this up on another machine
+
+1. `git clone https://github.com/orivaldogama/SmartStudio.git` — or copy this
+   folder including `.git`.
+2. `git log --oneline -3`: `4bee87c7d` is the baseline commit of this refactor;
+   anything newer is the most recent step.
+3. Read **Where the agent stopped** and **Where the next agent starts** above.
+4. Re-run the checks in **Evidence map** before trusting a row — files move.
+
+`origin` is `orivaldogama/SmartStudio` (public fork of `debpalash/VoiceStudio`,
+default branch `main`). Fetch upstream before branching for a PR, per the merge
+protocol in `AGENTS.md`.
 
 ## Verification commands
 
@@ -140,7 +151,7 @@ Run these before claiming a row is true:
 
 ```sh
 # the five Max-pack repos
-sed -n '/max:/p' electron/src/renderer/src/features/settings/performance-model-packs.ts
+grep -n "max:" electron/src/renderer/src/features/settings/performance-model-packs.ts
 
 # cache detection contract
 grep -n "snapshots" backend/services/model_catalogue.py
