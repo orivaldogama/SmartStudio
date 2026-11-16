@@ -22,6 +22,7 @@
 | Repository layout | [Project structure](STRUCTURE.md) |
 | Shipping capabilities | [Feature catalog](feature-catalog.md) · [Electron parity](../electron/PARITY.md) |
 | Planned work | [Live roadmap](ROADMAP.md) |
+| Remote GPU on Kaggle (plan, not shipped) | [Max pack on 2 × T4](install/kaggle.md) · [Refactor timeline and handoff](agents/kaggle-refactor-handoff.md) |
 | Release and distribution | [Release checklist](RELEASING.md) · [Store publishing](STORE-PUBLISHING.md) |
 | Model licensing | [Inventory](licensing/model-inventory.md) · [Review workflow](licensing/model-review-workflow.md) |
 | Designs and decisions | [Design references](specs/README.md) · [Architecture decisions](adr/) |
