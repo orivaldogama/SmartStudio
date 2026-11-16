@@ -1,3 +1,7 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 ## Active desktop: Electron only
 
 Electron (`electron/`) is the only desktop and web UI. The Tauri shell and legacy
@@ -99,8 +103,58 @@ Other conventions not yet established. Will populate as patterns emerge during d
 <!-- GSD:architecture-start source:ARCHITECTURE.md -->
 ## Architecture
 
-Architecture not yet mapped. Follow existing patterns found in the codebase.
+Three local-first layers plus the generated mobile surface. AGENTS.md carries the same map in table form; keep the two in sync.
+
+**`backend/` — FastAPI server (Python).** Entry `backend/main.py` puts `backend/` on `sys.path`, so modules use bare imports (`from core.config import ...`); run as `main:app` (cwd `backend/`) or `backend.main:app` (repo root). `api/routers/` is the HTTP surface, `core/` holds config/prefs/security/GPU + diagnostics, `services/` holds the pipelines (TTS, ASR, dubbing, audiobook, dictation, LLM). `services/tts_backend.py` is the multi-engine TTS registry: in-file classes in `_REGISTRY`, engines living in their own `backend/engines/<name>` module lazily registered via `_LAZY_REGISTRY` so import cost and optional deps stay out of startup; an engine id must also appear under `tts_engines` in `docs/features.yaml` (daily docs-drift check). The server is loopback HTTP — treat every query/path/form parameter as hostile; user-chosen filesystem destinations are authorized in Electron main (native save dialog), never via HTTP params. User state lives in `omnivoice_data/`; schema changes go through alembic (root `alembic.ini` → `backend/migrations/`) with a tested upgrade path.
+
+**`electron/` — the only desktop/web UI.** `src/main/` is the Electron main process: the backend supervisor (attaches to a backend already on `127.0.0.1:3900`, else spawns the `.venv` Python and supervises it — the child's stdin is the liveness signal), first-run setup, updater, account, diagnostics, IPC. The renderer never fetches the backend directly: in production it is served from `app://voicestudio/` and main proxies `/api` with `net.fetch`; in dev the Vite proxy does the same — no CORS workarounds. `src/preload/` holds narrow bridges; `src/renderer/src/` is React 19 + TanStack Router/Query/Form + Tailwind v4 + shadcn/ui: thin `routes/` compose feature pages under `features/<feature>/`, one component per file (soft 300 / hard 500 lines), Zustand store slices in `src/shared/store/`, and the i18n catalog in `i18n/locales/` (en + 21 translations — every user-facing string through `t('...')`, present in every locale). `src/shared/` is legacy being retired (#2603): never add new UI there. App name/ID and ports come from `config/app.json` (backend 3900, web 3901, Electron dev 3902) — change the manifest, not launchers. `bun run build:web` writes `frontend/dist`, which the backend serves at `/` (`OMNIVOICE_FRONTEND_DIST` overrides); `frontend/` holds no source code.
+
+**`native/desktop-bridge/` — Rust helper** built by Electron packaging for OS-level desktop integration; scope stays there and in the modules it imports (never revive the archived Tauri shell).
+
+**`omnivoice/` — the bundled TTS model package** (Apache-2.0 upstream, k2-fsa/OmniVoice): the default zero-shot multilingual engine plus CLIs (`omnivoice-infer`, `omnivoice-dub`, `omnivoice-demo`) and the training/eval extras.
+
+**`mobile/` — native iOS (Swift/SwiftUI) and Android (Kotlin/Compose)** implementing one shared contract, `mobile/contract/SPEC.md` (a feature ships on both or neither); on-device models first, pairing with the user's desktop backend is additive. Theme, API types and strings are generated from the Electron theme, the backend and the locale catalogs (`bun scripts/export-mobile-tokens.ts`, `uv run python scripts/export_openapi.py`) — never hand-copied; `tests/test_mobile_contract.py` fails on drift.
+
+**Support dirs:** `deploy/` (Dockerfile + compose, CUDA and ROCm flavors, install worker), `scripts/` (dev/build/release/CI helpers, mobile exporters, `check-docs-drift.py`), `docs/` (user/install/release docs + `docs/adr/`), `changelog.d/` (one-line release fragments per PR).
+
+**Four test suites:** `tests/` is the repo-wide pytest suite (conventions, version/locale/CJK parity, packaging, docs drift, mobile contract — it reads workflows and Electron catalogs, hence its whole-tree CI inputs); `backend/tests/` is an isolated pytest session with a hermetic `OMNIVOICE_DATA_DIR`; `tests/frontend/` is `node:test` for the JS build/dev scripts; `electron/tests/` holds Vitest specs, locale/packaging checks, Playwright desktop-UI tests and renderer smokes. `ci.yml` adds the UI crawler (clicks every route under injected API failures), release smoke, and the three-OS desktop matrix; `Tests (backend + frontend)` is the single required check.
 <!-- GSD:architecture-end -->
+
+## Commands
+
+Prereqs: Node **22** (`.nvmrc` — CI runs 22; newer majors change error messages and fail tests that pass on CI), Bun (root `packageManager`), uv + Python 3.11+, ffmpeg; Rust/Cargo for `native/desktop-bridge`. Linux desktop dev also needs the apt packages in `.github/CONTRIBUTING.md` → Prerequisites.
+
+```bash
+# Run
+bun run dev            # Electron + supervised backend with HMR; first run installs JS + Python deps
+bun run dev:web        # backend :3900 + renderer in a browser :3901
+bun run dev:api        # backend only — never start a second backend while the Electron supervisor runs one
+bun run setup:api      # rebuild only the Python env (CPU-only wheels: OMNIVOICE_TORCH_VARIANT=cpu; plain uv sync defaults to CUDA on Linux/Windows)
+bun run build          # build Electron; bun run start launches the built app
+bun run dist           # package installers locally (--publish never); bun run smoke-test = packaged startup smoke
+bun clean --dry-run    # preview a full local reset (bun clean also deletes app data, voices, managed engines)
+
+# Test
+uv run pytest tests/ -q -n auto        # repo-wide suite (pytest testpaths)
+uv run pytest backend/tests/ -q        # isolated backend session — CI runs the two suites separately
+uv run pytest tests/test_app_version.py -q          # single file; add ::test_name for one test
+bun run test:frontend                  # node:test suites for the JS build/dev scripts
+bun run check:electron                 # the broad desktop gate: typecheck, Electron tests, both builds, packaging contract
+bun run --cwd electron build && bun run --cwd electron test:desktop-ui   # real app vs fake backend (headless Linux: xvfb-run -a; traces in electron/test-results/)
+
+# Lint / format / types
+bun run typecheck                      # tsc over the electron node + web tsconfigs
+bun run lint                           # oxlint via vp (no max-lines rule — size caps are enforced in review)
+bun run format                         # vp fmt
+bun run --cwd electron locale:check    # i18n encoding, source keys, coverage across every locale
+
+# Other toolchains
+cargo check --manifest-path native/desktop-bridge/Cargo.toml   # on Rust changes (cargo fmt before committing)
+dagger call check                      # optional cached container runs of the test suites (needs Docker)
+make release                           # the release flow (scripts/release.py; see docs/RELEASING.md)
+```
+
+CI runs pytest with `HF_HUB_OFFLINE=1`; set it (and an empty `HF_HUB_CACHE`) when touching download-gated code — a warm developer cache hides failures. JS dependency changes require regenerating the root `bun.lock` and `bun install --frozen-lockfile` passing (Docker consumes it frozen).
 
 <!-- GSD:skills-start source:skills/ -->
 ## Project Skills
