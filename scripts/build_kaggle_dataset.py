@@ -290,7 +290,8 @@ def write_zip(out: Path, *, compress: bool) -> Path:
     """Pack ``out`` into ``<out>.zip``; stored by default (weights barely deflate)."""
     archive = out.with_suffix(".zip")
     mode = zipfile.ZIP_DEFLATED if compress else zipfile.ZIP_STORED
-    with zipfile.ZipFile(archive, "w", compression=mode, compresslevel=1 if compress else None) as zf:
+    level = 1 if compress else None
+    with zipfile.ZipFile(archive, "w", compression=mode, compresslevel=level) as zf:
         for path in sorted(out.rglob("*")):
             if path.is_file():
                 zf.write(path, path.relative_to(out).as_posix())

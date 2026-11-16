@@ -168,6 +168,7 @@ def test_symlinked_snapshot_is_copied_as_real_bytes(
     out = tmp_path / "dataset"
     builder.build(out, download=False, hashes=False, owner=None, force=False)
 
-    copied = out / "hub" / builder.repo_dir_name(REPO) / "snapshots" / revision / "model.safetensors"
+    snapshot = out / "hub" / builder.repo_dir_name(REPO) / "snapshots" / revision
+    copied = snapshot / "model.safetensors"
     assert not copied.is_symlink()
     assert copied.read_bytes() == WEIGHT
