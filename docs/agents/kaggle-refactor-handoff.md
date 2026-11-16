@@ -74,7 +74,7 @@ column names that commit instead of pretending each had its own.
 | T5 | 2026-11-16 | Established the repository on the fork's `main` and committed the plan and this page | `4bee87c7d`, `d59d74f9d` | `git show --stat 4bee87c7d` | done |
 | T6 | 2026-11-16 | Dataset builder: hub-cache layout from `revision_for`, `manifest.json` (SHAs, sizes, per-file sha256), `--verify`, `--zip`, `dataset-metadata.json`; test reads the result back through `model_catalogue` and `hf_revisions` | `b57f61b09` | `scripts/build_kaggle_dataset.py`, `tests/scripts/test_build_kaggle_dataset.py` | done, **pytest not run** (see [Local verification](#local-verification)) |
 | T7 | next | Read-only cache support (gap 1) — argued as unnecessary under `HF_HUB_OFFLINE=1`, unproven on a live mount | — | — | not started |
-| T8 | next | Licence pre-acceptance for ephemeral sessions (gap 2) | — | — | not started |
+| T8 | 2026-11-16 | Licence pre-acceptance for ephemeral sessions (gap 2): `scripts/kaggle_preaccept_licenses.py` records the Max pack through `model_acceptance.accept()` bound to the live terms fingerprint, refuses to run without `OMNIVOICE_DATA_DIR`; explicit notebook cell runs it before uvicorn starts | `526e95fb2` | `scripts/kaggle_preaccept_licenses.py`, `tests/scripts/test_kaggle_preaccept_licenses.py`, notebook licence cell | code done, stdlib-level tests pass locally, **not exercised on Kaggle** |
 | T9 | 2026-11-16 | Bootstrap notebook: dataset discovery, Docker-equivalent install, cuDNN 8 side-load, uvicorn in server mode against the read-only cache, `/health` wait, `/models` pack check, Cloudflare quick tunnel, printed URL + key | `3e8327590` | `notebooks/VoiceStudio_Kaggle_2xT4.ipynb` | code done, **never run on Kaggle** |
 | T10 | next | HF token in the setup wizard | — | — | not started |
 | T11 | last | Multi-GPU placement (gap 5) | — | — | not started |
@@ -123,17 +123,23 @@ Before trusting T6, run:
 uv run pytest tests/scripts/test_build_kaggle_dataset.py -q
 ```
 
+(The file failed to even collect until `6044f642b` — pytest imports it as
+`scripts.test_*` because `tests/scripts/` has an `__init__.py`, which shadowed
+`from scripts import build_kaggle_dataset`. It now loads the script by path.)
+
 ## Where the agent stopped
 
-End of **T12 code**: the plan (`4bee87c7d`), the builder (`b57f61b09`), the
-notebook (`3e8327590`) and the session-shutdown control (`e727d259f`:
-notebook sidecar route + Electron `shutdownRemote` IPC + Settings → Sharing
-button + locale strings + `tests/test_kaggle_session_control.py`) are
-committed and pushed. The README was rebranded for the fork just before
-(see `git log`). **Nothing has run on Kaggle**, the builder's tests and the
-Electron-side T12 tests have not run locally (no uv/bun on this machine; the
-notebook contract test and the locale checks did pass), and T7/T8/T10/T11
-are untouched.
+End of **T8 code**: the plan (`4bee87c7d`), the builder (`b57f61b09`), the
+notebook (`3e8327590`), the session-shutdown control (`e727d259f`: notebook
+sidecar route + Electron `shutdownRemote` IPC + Settings → Sharing button +
+locale strings + `tests/test_kaggle_session_control.py`) and the licence
+pre-acceptance (`526e95fb2`) are committed; the README was rebranded for the
+fork just before (`17efe667e`, see `git log`). A latent collection error in
+T6's test file was fixed on the way (`6044f642b`: `tests/scripts/__init__.py`
+shadowed `from scripts import …`). **Nothing has run on Kaggle**; the
+builder's tests still need the full uv env and the Electron-side T12 tests
+need bun (neither exists on this machine — the stdlib-level suites did pass).
+T7/T10/T11 are untouched.
 
 ## Where the next agent starts
 
@@ -149,9 +155,10 @@ are untouched.
    download/repair path to tolerate a cache it cannot write: no `refs/` write
    required, no lock file required, a clear error when a snapshot needs repair.
    Test: a chmod-0555 cache root serves a model without a write attempt.
-3. **T8 — licence pre-acceptance.** A documented, explicit bootstrap input that
-   records acceptance for the named models in the ephemeral data root. Not a
-   bypass of `model_acceptance`; the same fingerprint check must still apply.
+3. ~~**T8 — licence pre-acceptance.**~~ **Done** (`526e95fb2`): the notebook's
+   licence cell runs `scripts/kaggle_preaccept_licenses.py` through the real
+   fingerprinted gate. Verify it live during T9: a fresh session must not ask
+   again for NLLB-200 or the OmniVoice weights.
 4. **T10 — HF token in the wizard.** Mount `HuggingFaceToken` in step 1 of
    `setup-wizard.tsx`; no new strings. Test: a gated repo shows the token field
    before the download starts.
