@@ -1,5 +1,7 @@
 import { ModelLibrary, PerformanceModelPacks } from '@/features/settings/model-library';
 import { ModelStoreShownContext } from '@/features/settings/model-list/model-store-context';
+import { HuggingFaceToken } from '@/features/settings/credential-settings';
+import { useModelCatalogue } from '@/features/settings/model-catalogue-query';
 import { AnalyticsConsent } from './analytics-consent';
 import { AccountConsent } from './account-consent';
 import { DiagnosticConsent } from './diagnostic-consent';
@@ -67,6 +69,17 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
     enabled: step === 0,
     retry: false,
   });
+  const catalogue = useModelCatalogue();
+  // T10: a gated repo among the pending models cannot download without a
+  // token, so the credentials panel appears ahead of the pack picker —
+  // before the first 401, not after it.
+  const gatedPending = Boolean(
+    status.data?.missing?.some((model) =>
+      catalogue.data?.models?.some(
+        (row) => row.repo_id === model.repo_id && (row.gated || row.requires_hf_token),
+      ),
+    ),
+  );
   const canContinue =
     !enteringStudio &&
     (step === 0
@@ -158,6 +171,7 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
               )}
               {step === 1 && (
                 <>
+                  {gatedPending && <HuggingFaceToken />}
                   <PerformanceModelPacks compact={!advanced} />
                   {advanced && (
                     <div className="space-y-4">

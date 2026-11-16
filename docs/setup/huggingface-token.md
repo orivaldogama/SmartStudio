@@ -37,6 +37,10 @@ check for valid sources, with an **Active** badge on the highest-priority valid 
    up automatically.
 4. Select **Test now** to validate the token with Hugging Face. A successful test turns the indicator green and moves the **Active** badge to "App".
 
+The same panel also appears in the first-run setup wizard (step 2 · model
+packs) whenever a pending model is a gated repository that needs a token, so
+it can be set before the download starts.
+
 > **Known limitation (honest disclosure):** the encryption key is derived
 > per-install from the machine identifier. If you copy `omnivoice_data/`
 > across machines, the token row in `settings` will fail to decrypt on the
