@@ -13,7 +13,8 @@ bundled, so the apps show current pictures with no runtime network call:
   (Android copies that folder into its APK assets at build time)
 * iOS: ``Contributors.xcassets/contributor-<login>.imageset`` + ``HomeContributors.swift``
 * Android: ``HomeContributors.kt``
-* README Team contributor rows (English and every translation in ``docs/readme/``)
+* README Team contributor rows (only READMEs that still carry the avatar row —
+  the SmartStudio fork's own README does not)
 
 ``homeCoreMaintainers`` is owner-assigned and preserved. Output is deterministic:
 files (and the snapshot date) change only when the contributor data or avatars do.
@@ -45,7 +46,23 @@ AVATARS = HOME / "contributors"
 XCASSETS = ROOT / "mobile/ios/VoiceStudio/Resources/Contributors.xcassets"
 SWIFT = ROOT / "mobile/ios/VoiceStudio/Features/HomeContributors.swift"
 KOTLIN = ROOT / "mobile/android/features/src/main/kotlin/com/voicestudio/mobile/features/HomeContributors.kt"
-READMES = (ROOT / "README.md", *sorted((ROOT / "docs/readme").glob("README_*.md")))
+# A README is refreshed only while it carries exactly one contributor avatar
+# row; the fork's root README dropped the row and the translated READMEs are
+# gone, so both fall out of the list instead of failing the refresh.
+_CONTRIBUTOR_ROW = re.compile(
+    r'^<a href="https://github\.com/[^"]+"><img src="https://github\.com/[^"]+\.png\?size=96".*$', re.M
+)
+
+
+def _tracks_contributor_row(path: Path) -> bool:
+    return path.is_file() and len(_CONTRIBUTOR_ROW.findall(path.read_text(encoding="utf-8"))) == 1
+
+
+READMES = tuple(
+    path
+    for path in (ROOT / "README.md", *sorted((ROOT / "docs/readme").glob("README_*.md")))
+    if _tracks_contributor_row(path)
+)
 
 # Automation accounts that GitHub reports as ``type: User``.
 AUTOMATION_LOGINS = frozenset({
@@ -172,10 +189,9 @@ def readme_row(logins: list[str]) -> str:
 
 def render_readme(text: str, logins: list[str], where: Path | str = "README") -> str:
     """Replace the single Team contributor avatar row (the core team has its own table)."""
-    row = re.compile(r'^<a href="https://github\.com/[^"]+"><img src="https://github\.com/[^"]+\.png\?size=96".*$', re.M)
-    if len(row.findall(text)) != 1:
+    if len(_CONTRIBUTOR_ROW.findall(text)) != 1:
         raise SystemExit(f"{where}: expected exactly one contributor avatar row")
-    return row.sub(lambda _m: readme_row(logins), text)
+    return _CONTRIBUTOR_ROW.sub(lambda _m: readme_row(logins), text)
 
 
 def imageset_contents(login: str) -> str:

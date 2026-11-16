@@ -7,7 +7,7 @@ Every folder has a single job. Every file at the root earns its place.
 ```
 VoiceStudio/
 │
-├── README.md ⟵ user-facing overview (translations: docs/readme/README_*.md)
+├── README.md ⟵ user-facing overview (SmartStudio fork page; no translations)
 ├── CHANGELOG.md                 ⟵ release history; Electron releases use the tagged section
 ├── CLAUDE.md / AGENTS.md        ⟵ matching copies of the agent operating rules
 ├── LICENSE / LICENSE-NOTICE.md / SPONSORS.md   ⟵ legal terms, required notices, supporters
