@@ -78,7 +78,7 @@ column names that commit instead of pretending each had its own.
 | T9 | 2026-11-16 | Bootstrap notebook: dataset discovery, Docker-equivalent install, cuDNN 8 side-load, uvicorn in server mode against the read-only cache, `/health` wait, `/models` pack check, Cloudflare quick tunnel, printed URL + key | `3e8327590` | `notebooks/VoiceStudio_Kaggle_2xT4.ipynb` | code done, **never run on Kaggle** |
 | T10 | next | HF token in the setup wizard | — | — | not started |
 | T11 | last | Multi-GPU placement (gap 5) | — | — | not started |
-| T12 | 2026-11-16 | Session shutdown control: notebook `session_control.py` sidecar (Bearer-gated route, tunnel pidfile → kernel SIGTERM/SIGKILL → `os._exit`), `shutdownRemoteSession` in Electron main + IPC + Settings button with confirm, 7 strings × 22 locales, notebook contract test | — (uncommitted at write time; fill the SHA when committed) | `notebooks/VoiceStudio_Kaggle_2xT4.ipynb`, `electron/src/main/remote-backend.ts`, `electron/src/renderer/src/features/settings/remote-backend-settings.tsx`, `tests/test_kaggle_session_control.py` | code done, **not run on Kaggle; Electron tests not run locally** (no bun/node_modules on the dev machine) |
+| T12 | 2026-11-16 | Session shutdown control: notebook `session_control.py` sidecar (Bearer-gated route, tunnel pidfile → kernel SIGTERM/SIGKILL → `os._exit`), `shutdownRemoteSession` in Electron main + IPC + Settings button with confirm, 7 strings × 22 locales, notebook contract test | `e727d259f` | `notebooks/VoiceStudio_Kaggle_2xT4.ipynb`, `electron/src/main/remote-backend.ts`, `electron/src/renderer/src/features/settings/remote-backend-settings.tsx`, `tests/test_kaggle_session_control.py` | code done, **not run on Kaggle; Electron tests not run locally** (no bun/node_modules on the dev machine) |
 
 ## Evidence map
 
@@ -125,14 +125,15 @@ uv run pytest tests/scripts/test_build_kaggle_dataset.py -q
 
 ## Where the agent stopped
 
-End of **T12 code**: the plan (`4bee87c7d`), the builder (`b57f61b09`) and the
-notebook (`3e8327590`) are committed and pushed; the T12 session-shutdown
-control (notebook sidecar route + Electron `shutdownRemote` IPC + Settings →
-Sharing button + locale strings + `tests/test_kaggle_session_control.py`) sits
-in the working tree **uncommitted**. **Nothing has run on Kaggle**, the
-builder's tests have not run locally, the Electron-side T12 tests have not run
-locally (no bun/node_modules on this machine), and T7/T8/T10/T11 are
-untouched.
+End of **T12 code**: the plan (`4bee87c7d`), the builder (`b57f61b09`), the
+notebook (`3e8327590`) and the session-shutdown control (`e727d259f`:
+notebook sidecar route + Electron `shutdownRemote` IPC + Settings → Sharing
+button + locale strings + `tests/test_kaggle_session_control.py`) are
+committed and pushed. The README was rebranded for the fork just before
+(see `git log`). **Nothing has run on Kaggle**, the builder's tests and the
+Electron-side T12 tests have not run locally (no uv/bun on this machine; the
+notebook contract test and the locale checks did pass), and T7/T8/T10/T11
+are untouched.
 
 ## Where the next agent starts
 
