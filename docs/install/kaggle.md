@@ -143,9 +143,10 @@ Attach the dataset, pick **Settings → Accelerator → GPU T4 ×2**, keep inter
 on, and run the cells: it locates the mounted `hub/`, installs the backend the
 way the Docker image does (`uv pip install --system` with
 `deploy/torch-constraints.txt`, `deploy/security-constraints.txt` and
-`deploy/uv-overrides.txt`), side-loads cuDNN 8 for CTranslate2, starts uvicorn,
-waits for `/health`, checks the five repositories through `/models` and prints
-the tunnel URL with the API key.
+`deploy/uv-overrides.txt`), side-loads cuDNN 8 for CTranslate2, records your
+per-session licence acceptance for the pack (see [Licensing](#licensing)),
+starts uvicorn, waits for `/health`, checks the five repositories through
+`/models` and prints the tunnel URL with the API key.
 
 The start cell launches uvicorn through a small `session_control.py` sidecar it
 writes next to the log: the backend app plus one extra route,
@@ -214,17 +215,21 @@ and OmniVoice's weights are non-commercial. Keep the dataset **private** and use
 it yourself. See the [model licence inventory](../licensing/model-inventory.md).
 
 Pre-installing the weights does not accept their terms: `services/model_acceptance.py`
-still gates every model whose licence category is not `commercial`. Acceptance is
-recorded in `OMNIVOICE_DATA_DIR`, which is ephemeral, so an unmodified session
-asks again on the first use of each model. Accept it once per session in the
-UI; pre-acceptance (gap 2) would remove that step.
+still gates every model whose licence category is not `commercial`, and acceptance is
+recorded in `OMNIVOICE_DATA_DIR` — which is ephemeral, so every fresh session must
+record it again. The bootstrap notebook has an explicit licence cell for that: it
+runs `scripts/kaggle_preaccept_licenses.py`, which records acceptance for the pack
+through the same fingerprinted `accept()` call the app UI uses (terms that change
+later still ask again) and refuses to run without `OMNIVOICE_DATA_DIR` set, so it
+can never touch a real profile by accident. Running the cell is your acceptance act
+for the session; skip it and the app asks per model in the UI instead.
 
 ## Known gaps before this ships
 
 | # | Gap | Where |
 | --- | --- | --- |
 | 1 | Read-only cache is argued, not proven: a live mount has not been exercised, and any path that still writes would fail there | `backend/services/model_catalogue.py`, Hub writes |
-| 2 | Licence pre-acceptance for an ephemeral session (today: accept once per session) | `backend/services/model_acceptance.py` |
+| 2 | ~~Licence pre-acceptance for an ephemeral session~~ **closed in code**: the notebook's licence cell runs `scripts/kaggle_preaccept_licenses.py` (not yet exercised live) | `scripts/kaggle_preaccept_licenses.py` |
 | 3 | `frontend/dist` has to be published for browser-only use (optional: the desktop app needs nothing) | `electron/vite.web.config.ts` |
 | 4 | Remote-backend URL changes per session | `electron/src/renderer/src/features/settings` (deep link/env) |
 | 5 | Second T4 sits idle (single device per process) | `backend/services/model_manager.py`, `backend/core/device_caps.py` |
